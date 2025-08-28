@@ -18,8 +18,7 @@
         web = {
           # Jalankan server bawaan Python untuk serve file statis
           command = ["python3" "-m" "http.server" "$PORT"];
-          manager = "web";
-          # path = "."; # default dari root project
+          cwd = "."; # default dari root project
         };
       };
     };
@@ -27,7 +26,7 @@
     workspace = {
       onCreate = {
         # Misalnya langsung buka file index.html & manifest.json saat project dibuat
-        default.openFiles = [ "index.html" "manifest.json" ".idx/dev.nix" ];
+        default.openFiles = [ "InputImage.html" "manifest.json" ".idx/dev.nix" ];
       };
     };
   };

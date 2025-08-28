@@ -1,33 +1,37 @@
-self.addEventListener('install', event => {
-    event.waitUntil(
-      caches.open('pwa-cache-v1').then(cache => {
-        return cache.addAll([
-          '/index.html',
-          '/manifest.json',
-          '/assets/icons/icon-192.png',
-          '/assets/icons/icon-512.png'
-        ]);
-      })
-    );
+const fileInput = document.getElementById("fileInput");
+const saveBtn = document.getElementById("saveBtn");
+const gallery = document.getElementById("gallery");
+
+saveBtn.addEventListener("click", () => {
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Pilih gambar dulu!");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    // buat element img
+    const img = document.createElement("img");
+    img.src = e.target.result;
+
+    // masukkan ke gallery
+    gallery.appendChild(img);
+
+    // opsional: simpan ke localStorage
+    let savedImages = JSON.parse(localStorage.getItem("gallery")) || [];
+    savedImages.push(e.target.result);
+    localStorage.setItem("gallery", JSON.stringify(savedImages));
+  };
+  reader.readAsDataURL(file);
+});
+
+// saat halaman dibuka ulang, load dari localStorage
+window.addEventListener("load", () => {
+  let savedImages = JSON.parse(localStorage.getItem("gallery")) || [];
+  savedImages.forEach(src => {
+    const img = document.createElement("img");
+    img.src = src;
+    gallery.appendChild(img);
   });
-  
-  self.addEventListener('fetch', event => {
-    event.respondWith(
-      caches.match(event.request)
-        .then(response => response || fetch(event.request))
-    );
-  });
-  
-  // Registrasi Service Worker
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", function () {
-    navigator.serviceWorker
-      .register("./service-worker.js")
-      .then(function (registration) {
-        console.log("✅ Service Worker terdaftar:", registration);
-      })
-      .catch(function (error) {
-        console.log("❌ Service Worker gagal:", error);
-      });
-  });
-}
+});

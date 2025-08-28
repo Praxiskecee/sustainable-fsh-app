@@ -1,0 +1,20 @@
+self.addEventListener('install', event => {
+    event.waitUntil(
+      caches.open('pwa-cache-v1').then(cache => {
+        return cache.addAll([
+          '/InputImage.html',
+          '/manifest.json',
+          '/assets/icons/icon-192.png',
+          '/assets/icons/icon-512.png'
+        ]);
+      })
+    );
+  });
+  
+  self.addEventListener('fetch', event => {
+    event.respondWith(
+      caches.match(event.request)
+        .then(response => response || fetch(event.request))
+    );
+  });
+  

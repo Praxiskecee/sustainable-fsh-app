@@ -2,7 +2,7 @@
     "name": "PWA Basic App",
     "short_name": "PWA Basic",
     "description": "Aplikasi PWA sederhana.",
-    "start_url": "/index.html",
+    "start_url": "/InputImage.html",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#ffffff",
