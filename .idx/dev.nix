@@ -4,6 +4,7 @@
   # Paket yang akan diinstal di environment
   packages = [
     pkgs.python3
+    pkgs.firebase-cli 
   ];
 
   idx = {
