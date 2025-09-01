@@ -1,19 +1,10 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// ✅ Config Firebase
-const firebaseConfig = {
-  apiKey: "AIzaSyDOW2t8PK9pD3jDnm3sMvkRPZCKTLf_WYA",
-  authDomain: "wardobeapp.firebaseapp.com",
-  projectId: "wardobeapp",
-  storageBucket: "wardobeapp.appspot.com",
-  messagingSenderId: "643458460104",
-  appId: "1:643458460104:web:b29198fee1d3c31d1178fd",
-  measurementId: "G-DHMLZS4KS4"
-};
+// NO manual config needed. Firebase emulators handle this automatically.
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// Get the Firestore instance. It will be automatically configured by /__/firebase/init.js
+const db = getFirestore();
 
 const imageInput = document.getElementById("imageInput");
 const preview = document.getElementById("preview");
