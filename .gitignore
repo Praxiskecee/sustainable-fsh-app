@@ -1,1 +1,22 @@
-node_modules
+# Dependencies
+# Ignore local-level and function-level node_modules directories
+**/node_modules
+
+# Logs
+# Ignore various log files from npm, yarn, and Firebase
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Firebase Emulators
+# Ignore emulator-specific data and cache
+.firebase/emulators
+*.jar
+
+# General
+# Ignore operating system files
+.DS_Store
+thumbs.db
