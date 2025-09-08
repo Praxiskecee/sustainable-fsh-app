@@ -3,7 +3,6 @@
     "public": ".",
     "ignore": [
       "firebase.json",
-      "**/.*",
       "**/node_modules/**"
     ],
     "rewrites": [
@@ -12,5 +11,8 @@
         "destination": "/InputImage.html"
       }
     ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }

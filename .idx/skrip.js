@@ -1,10 +1,6 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// NO manual config needed. Firebase emulators handle this automatically.
-
-// Get the Firestore instance. It will be automatically configured by /__/firebase/init.js
-const db = getFirestore();
+import { db } from './firebase.js'; // Import the configured db instance
+import { collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const imageInput = document.getElementById("imageInput");
 const preview = document.getElementById("preview");

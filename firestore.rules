@@ -1,0 +1,11 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow anyone to read and write to the wardrobe collection for now.
+    // WARNING: This is insecure. You should add authentication rules later.
+    match /wardrobe/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
