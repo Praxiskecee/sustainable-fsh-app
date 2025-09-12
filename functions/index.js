@@ -1,82 +1,62 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
-const path = require("path");
-const os = require("os");
-const fs = require("fs");
-const Busboy = require("busboy");
 const cors = require("cors")({ origin: true });
 
 admin.initializeApp();
 
+// Constants for validation
+const SUPPORTED_FORMATS = ["image/jpeg", "image/png", "image/svg+xml", "image/webp", "image/avif"];
+const MAX_SIZE_MB = 10;
+const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+/**
+ * An HTTP-triggered Cloud Function to receive and validate a Base64 encoded image.
+ * The function expects a JSON payload in the format: { "image": "data:image/jpeg;base64,..." }
+ */
 exports.uploadImage = functions.https.onRequest((req, res) => {
   // 1. Use CORS to allow requests from your web app
   cors(req, res, () => {
+    // 2. Ensure the request method is POST
     if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method Not Allowed" });
+      return res.status(405).json({ success: false, error: "Method Not Allowed. Please use POST." });
     }
 
-    // 2. Use Busboy to parse multipart/form-data
-    const busboy = Busboy({ headers: req.headers });
-    const tmpdir = os.tmpdir();
-    const uploads = {};
+    // 3. Get the Base64 string from the JSON body
+    const { image: base64Image } = req.body;
+    if (!base64Image || typeof base64Image !== "string") {
+      return res.status(400).json({ success: false, error: "Bad Request. The 'image' field with a Base64 string is required in the JSON body." });
+    }
 
-    busboy.on("file", (fieldname, file, info) => {
-      const { filename, encoding, mimeType } = info;
-      console.log(
-        `File [${fieldname}]: filename: ${filename}, encoding: ${encoding}, mimeType: ${mimeType}`
-      );
+    // 4. Manually parse the data URI and validate the image
+    const match = base64Image.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+    if (!match) {
+      return res.status(400).json({ success: false, error: "Invalid format. The 'image' string must be a valid data URI (e.g., 'data:image/jpeg;base64,...')." });
+    }
 
-      // 3. Validate file type
-      if (mimeType !== "image/jpeg" && mimeType !== "image/png") {
-        return res.status(400).json({ message: "Unsupported file type. Please upload a JPEG or PNG image." });
-      }
+    const mimeType = match[1];
+    const base64Data = match[2];
 
-      const filepath = path.join(tmpdir, filename);
-      const writeStream = fs.createWriteStream(filepath);
-      file.pipe(writeStream);
+    // 4a. Add image format validation
+    if (!SUPPORTED_FORMATS.includes(mimeType)) {
+      return res.status(400).json({ success: false, error: `Unsupported image format. Only JPEG and PNG are allowed. Found: ${mimeType}` });
+    }
 
-      uploads[fieldname] = { filepath, mimeType };
-    });
+    // 4b. Add image size validation
+    // The length of a Base64 string is approximately 4/3 of the original data size.
+    const approxSizeInBytes = Math.ceil(base64Data.length * 3 / 4);
+    if (approxSizeInBytes > MAX_SIZE_BYTES) {
+      return res.status(400).json({ success: false, error: `Image size exceeds the ${MAX_SIZE_MB}MB limit.` });
+    }
 
-    busboy.on("finish", async () => {
-      try {
-        const imageField = Object.keys(uploads)[0]; // Assuming one file upload
-        if (!imageField) {
-          return res.status(400).json({ message: "No file uploaded." });
-        }
-        
-        const { filepath, mimeType } = uploads[imageField];
-        const filename = path.basename(filepath);
-        const bucket = admin.storage().bucket();
-
-        // 4. Upload the file to Firebase Storage
-        const [uploadedFile] = await bucket.upload(filepath, {
-          destination: `uploads/${Date.now()}-${filename}`,
-          metadata: {
-            contentType: mimeType,
-          },
-        });
-
-        // Make the file public
-        await uploadedFile.makePublic();
-
-        // Get the public URL
-        const publicUrl = uploadedFile.publicUrl();
-
-        // Cleanup the temporary file
-        fs.unlinkSync(filepath);
-
-        // 5. Return a success response with the URL
-        res.status(200).json({
-          message: "Image uploaded successfully!",
-          imageUrl: publicUrl,
-        });
-      } catch (error) {
-        console.error("Error uploading file:", error);
-        res.status(500).json({ message: "Something went wrong.", error });
+    // 5. If all validations pass, return a success response
+    // In a real application, you might save the base64Data to a database (like Firestore) here.
+    return res.status(200).json({ 
+      success: true, 
+      message: "Image received and validated successfully.",
+      metadata: {
+        mimeType: mimeType,
+        sizeInBytes: approxSizeInBytes
       }
     });
-
-    busboy.end(req.rawBody);
   });
 });
