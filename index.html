@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clothing Gallery</title>
+  <link rel="stylesheet" href=".idx/style.css">
+</head>
+<body>
+
+  <div class="container">
+    <h1>Clothing Labeling App</h1>
+
+    <!-- 1. Authentication UI -->
+    <div id="authContainer">
+      <p>Silakan login untuk melanjutkan.</p>
+      <button id="loginGoogleBtn">Login dengan Google</button>
+      <button id="loginAnonBtn">Lanjutkan Sebagai Tamu (Anonim)</button>
+    </div>
+
+    <!-- 2. Main App Content (Initially Hidden) -->
+    <div id="appContainer" style="display: none;">
+
+      <!-- User Status & Logout -->
+      <div id="userStatus">
+        <!-- User info will be injected here by script.js -->
+      </div>
+      <button id="logoutBtn">Logout</button>
+
+      <!-- Upload Section -->
+      <div class="upload-section">
+        <div class="file-input-container">
+          <label for="imageInput" class="file-input-label">Pilih Gambar</label>
+          <input type="file" id="imageInput" accept="image/*">
+        </div>
+        <div class="preview-area">
+          <img id="preview" src="" alt="Preview">
+          <div class="file-info" id="fileInfo"></div>
+        </div>
+        <input type="text" id="labelInput" placeholder="Masukkan label pakaian">
+        <div class="status-message" id="statusMessage"></div>
+        <button id="saveBtn">Simpan</button>
+      </div>
+
+      <!-- Gallery Section -->
+      <div class="container">
+        <h2>Gallery</h2>
+        <div class="gallery" id="gallery">
+          <div class="empty-state" id="emptyState">
+            <p>Belum ada item pakaian. Tambahkan gambar pertama Anda!</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Script -->
+  <script type="module" src=".idx/skrip.js"></script>
+</body>
+</html>

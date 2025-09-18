@@ -1,11 +1,19 @@
-
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow anyone to read and write to the wardrobe collection for now.
-    // WARNING: This is insecure. You should add authentication rules later.
-    match /wardrobe/{document=**} {
-      allow read, write: if true;
+
+    // Target the 'wardrobe' collection specifically.
+    match /wardrobe/{documentId} {
+
+      // RULE 1: Users can only read, update, or delete THEIR OWN documents.
+      // We check if the existing document's 'userId' field matches the UID of the user making the request.
+      allow read, update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+
+      // RULE 2: Users can only create new documents with THEIR OWN userId.
+      // We check the incoming document's 'userId' to ensure they are not creating a document for someone else.
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+
     }
   }
 }

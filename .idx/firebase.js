@@ -1,9 +1,15 @@
-
-// Import the functions you need from the SDKs you need
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+// Import a modular Auth functions
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signInAnonymously, 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDOW2t8PK9pD3jDnm3sMvkRPZCKTLf_WYA",
   authDomain: "wardobeapp.firebaseapp.com",
@@ -17,5 +23,15 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Get the Firestore instance and export it
+// Get instances and export them
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+
+// Export the specific functions we will use
+export { 
+  onAuthStateChanged, 
+  signInAnonymously, 
+  GoogleAuthProvider, 
+  signInWithPopup,
+  signOut
+};
