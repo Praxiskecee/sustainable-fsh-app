@@ -1,25 +1,39 @@
+/**
+ * @file Main script for the Clothing Labeling PWA.
+ * @description Handles authentication, image uploading, data storage in Firestore,
+ * and dynamic gallery display. Includes features like offline detection,
+ * loading indicators, and robust error handling with retry mechanisms.
+ * @version 0.2.0
+ */
 
-// Import Firestore and Auth functions
-import { 
-  db, 
-  auth, 
-  onAuthStateChanged, 
-  signInAnonymously, 
-  GoogleAuthProvider, 
+// ===== Import Firebase Functions =====
+import {
+  db,
+  auth,
+  onAuthStateChanged,
+  signInAnonymously,
+  GoogleAuthProvider,
   signInWithPopup,
   signOut
 } from './firebase.js';
-import { collection, addDoc, onSnapshot, deleteDoc, doc, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc,
+  query,
+  where
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// ===== Element References =====
-// Auth UI
+// ===== DOM Element References =====
+const spinner = document.getElementById("spinner");
+const offlineIndicator = document.getElementById("offlineIndicator");
 const authContainer = document.getElementById("authContainer");
 const loginGoogleBtn = document.getElementById("loginGoogleBtn");
-const loginAnonBtn = document.getElementById("loginAnonBtn"); // Renamed for clarity
+const loginAnonBtn = document.getElementById("loginAnonBtn");
 const userStatus = document.getElementById("userStatus");
 const logoutBtn = document.getElementById("logoutBtn");
-
-// Main App UI
 const appContainer = document.getElementById("appContainer");
 const imageInput = document.getElementById("imageInput");
 const preview = document.getElementById("preview");
@@ -30,106 +44,257 @@ const gallery = document.getElementById("gallery");
 const emptyState = document.getElementById("emptyState");
 const statusMessage = document.getElementById("statusMessage");
 
-// ===== Validation & State =====
-const MAX_FILE_SIZE_KB = 750;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_KB * 1024;
-
+// ===== App State =====
+/** @type {File | null} */
 let currentFile = null;
+/** @type {string | null} */
 let currentBase64 = null;
+/** @type {Function | null} */
 let unsubscribeFromGallery = null;
+/** @type {Function | null} */
+let lastFailedOperation = null;
 
-// ===== Auth State Management (The Core of the App) =====
+// ===== UI & Status Management =====
+
+/**
+ * Shows the main loading spinner.
+ */
+const showSpinner = () => spinner.style.display = 'block';
+
+/**
+ * Hides the main loading spinner.
+ */
+const hideSpinner = () => spinner.style.display = 'none';
+
+/**
+ * Checks the browser's online status and updates the UI accordingly.
+ * Shows/hides the offline indicator and enables/disables the save button.
+ */
+const updateOnlineStatus = () => {
+  const isOnline = navigator.onLine;
+  offlineIndicator.style.display = isOnline ? 'none' : 'block';
+  saveBtn.disabled = !isOnline;
+  if (!isOnline) {
+    showStatus("You are offline. Connection is required.", "error");
+  } else {
+    // Hide status only if it was an offline message
+    if (statusMessage.textContent.includes("offline")) {
+        statusMessage.style.display = 'none';
+    }
+  }
+};
+
+/**
+ * Displays a status message to the user.
+ * @param {string} message - The message to display.
+ * @param {'success'|'error'|'info'} type - The type of message, for styling.
+ * @param {Function | null} [retryOperation=null] - An optional function to be executed when the user clicks a "Retry" button.
+ */
+function showStatus(message, type, retryOperation = null) {
+  statusMessage.innerHTML = ''; // Clear previous content
+  const messageNode = document.createTextNode(message + " ");
+  statusMessage.appendChild(messageNode);
+  
+  statusMessage.className = "status-message " + type;
+  statusMessage.style.display = "block";
+
+  if (retryOperation) {
+    lastFailedOperation = retryOperation;
+    const retryBtn = document.createElement('button');
+    retryBtn.textContent = 'Retry';
+    retryBtn.className = 'retry-btn';
+    retryBtn.onclick = () => {
+      showStatus("Retrying...", "info");
+      lastFailedOperation();
+    };
+    statusMessage.appendChild(retryBtn);
+  }
+
+  // Do not auto-hide info messages or messages with a retry button
+  if (type !== 'info' && !retryOperation) {
+    setTimeout(() => {
+      if (statusMessage.textContent.startsWith(message)) {
+        statusMessage.style.display = "none";
+      }
+    }, 5000);
+  }
+}
+
+/**
+ * A centralized handler for processing and displaying errors.
+ * @param {Error} error - The error object.
+ * @param {Function} operation - The operation that failed, to be used for a retry mechanism.
+ */
+function handleError(error, operation) {
+  console.error(`${operation.name} failed:`, error);
+  let userMessage;
+
+  switch (error.code) {
+    case 'auth/popup-closed-by-user':
+      userMessage = 'Login process was cancelled.';
+      break;
+    case 'unavailable':
+      userMessage = 'Connection to the server failed. Check your internet connection.';
+      break;
+    case 'permission-denied':
+      userMessage = 'Access denied. Ensure you have the correct permissions in Firestore Rules.';
+      break;
+    default:
+      userMessage = `An unexpected error occurred (${error.code || 'unknown'}).`;
+  }
+  
+  showStatus(userMessage, "error", operation);
+}
+
+
+// ===== Authentication =====
+
+/**
+ * Sets up an observer on the authentication state.
+ * Manages UI and data fetching based on whether a user is logged in or out.
+ */
 onAuthStateChanged(auth, (user) => {
+  hideSpinner();
   if (user) {
-    // --- USER IS LOGGED IN ---
-    console.log("User is logged in:", user);
-    // 1. Update UI
+    // User is logged in
     authContainer.style.display = 'none';
     appContainer.style.display = 'block';
-
-    // 2. Display user info
     if (user.isAnonymous) {
-      userStatus.innerHTML = `<p>Logged in as Guest: <strong>${user.uid}</strong></p>`;
+      userStatus.innerHTML = `<p>Logged in as Guest</p>`;
     } else {
       userStatus.innerHTML = `
         <div class="user-info">
-          <img src="${user.photoURL}" alt="User Photo" width="30" height="30">
-          <span>Welcome, ${user.displayName} (${user.email})</span>
+          <img src="${user.photoURL}" alt="User Photo">
+          <span>${user.displayName}</span>
         </div>`;
     }
-
-    // 3. Fetch user-specific data
     setupGalleryListener(user.uid);
-
   } else {
-    // --- USER IS LOGGED OUT ---
-    console.log("User is logged out.");
-    // 1. Update UI
+    // User is logged out
     authContainer.style.display = 'block';
     appContainer.style.display = 'none';
     userStatus.innerHTML = '';
-
-    // 2. Stop listening to data and clear gallery
     if (unsubscribeFromGallery) {
       unsubscribeFromGallery();
     }
     gallery.innerHTML = '';
+    emptyState.style.display = 'block';
   }
 });
 
-// ===== Login Buttons =====
-loginGoogleBtn.addEventListener("click", async () => {
+/**
+ * Initiates the Google Sign-In popup flow.
+ */
+async function loginWithGoogle() {
   const provider = new GoogleAuthProvider();
   try {
+    showSpinner();
     await signInWithPopup(auth, provider);
-    // The onAuthStateChanged observer will handle the rest.
+    // onAuthStateChanged will handle the rest.
   } catch (error) {
-    console.error("Google sign-in failed:", error);
-    alert(`Google login failed: ${error.message}`);
+    handleError(error, loginWithGoogle);
+  } finally {
+    hideSpinner();
   }
-});
+}
 
-loginAnonBtn.addEventListener("click", async () => {
+/**
+ * Initiates the Anonymous Sign-In flow.
+ */
+async function loginAnonymously() {
   try {
+    showSpinner();
     await signInAnonymously(auth);
-    // The onAuthStateChanged observer will handle the rest.
+    // onAuthStateChanged will handle the rest.
   } catch (error) {
-    console.error("Anonymous sign-in failed:", error);
-    alert("Guest login failed. Please try again.");
+    handleError(error, loginAnonymously);
+  } finally {
+    hideSpinner();
   }
-});
+}
 
-// ===== Logout Button =====
-logoutBtn.addEventListener("click", async () => {
+/**
+ * Signs the current user out.
+ */
+async function logout() {
   try {
+    showSpinner();
     await signOut(auth);
-    // The onAuthStateChanged observer will handle the UI changes.
+    // onAuthStateChanged will handle UI changes.
   } catch (error) {
-    console.error("Sign out failed:", error);
-    alert("Logout failed. Please try again.");
+    handleError(error, logout);
+  } finally {
+    hideSpinner();
   }
-});
+}
 
 
-// ===== File Input Logic (No changes) =====
-imageInput.addEventListener("change", function () {
-  const file = this.files[0];
-  if (!file) { resetInput(); return; }
-  if (!file.type.startsWith("image/")) { showStatus("File tidak valid. Pilih gambar.", "error"); resetInput(); return; }
-  if (file.size > MAX_FILE_SIZE_BYTES) { const sizeInKB = (file.size / 1024).toFixed(2); showStatus(`Ukuran file (${sizeInKB} KB) > ${MAX_FILE_SIZE_KB} KB.`, "error"); resetInput(); return; }
+// ===== File Handling =====
+
+/**
+ * Handles the file input change event. Validates the file and generates a preview.
+ * @param {Event} event - The change event from the file input.
+ */
+function handleFileInput(event) {
+  const file = event.target.files[0];
+  if (!file) {
+    resetInput();
+    return;
+  }
+  if (!file.type.startsWith("image/")) {
+    showStatus("Invalid file. Please select an image.", "error");
+    resetInput();
+    return;
+  }
+
   currentFile = file;
   const reader = new FileReader();
-  reader.onload = (e) => { currentBase64 = e.target.result; preview.src = currentBase64; };
+  reader.onload = (e) => {
+    currentBase64 = e.target.result;
+    preview.src = currentBase64;
+    preview.style.display = 'block';
+  };
+  reader.onerror = () => {
+    showStatus("Failed to read the file.", "error");
+    resetInput();
+  };
   reader.readAsDataURL(file);
-  fileInfo.textContent = `${file.name} | ${(file.size / 1024).toFixed(2)} KB`;
-});
+  fileInfo.textContent = `${file.name}`;
+}
 
-// ===== Save Data (No changes) =====
-saveBtn.addEventListener("click", async () => {
+/**
+ * Resets the file input and associated state variables and UI elements.
+ */
+function resetInput() {
+  currentFile = null;
+  currentBase64 = null;
+  imageInput.value = "";
+  preview.src = "";
+  preview.style.display = 'none';
+  fileInfo.textContent = "";
+  labelInput.value = "";
+}
+
+
+// ===== Firestore Data Operations =====
+
+/**
+ * Saves a new item (image and label) to the Firestore "wardrobe" collection.
+ */
+async function saveItem() {
   const user = auth.currentUser;
-  if (!user) { showStatus("Anda harus login untuk menyimpan.", "error"); return; }
-  if (!currentBase64 || !labelInput.value.trim()) { showStatus("Pilih gambar dan isi label.", "error"); return; }
-  showStatus("Menyimpan...", "info");
+  if (!navigator.onLine) {
+    showStatus("No internet connection. Please try again later.", "error", saveItem);
+    return;
+  }
+  if (!user || !currentBase64 || !labelInput.value.trim()) {
+    showStatus("Please select an image and enter a label.", "error");
+    return;
+  }
+
+  showSpinner();
+  saveBtn.disabled = true;
+
   try {
     await addDoc(collection(db, "wardrobe"), {
       userId: user.uid,
@@ -137,72 +302,120 @@ saveBtn.addEventListener("click", async () => {
       label: labelInput.value.trim(),
       timestamp: new Date().toISOString()
     });
-    showStatus("Item berhasil disimpan!", "success");
+    showStatus("Item saved successfully!", "success");
     resetInput();
-    labelInput.value = "";
-  } catch (e) {
-    console.error("Error adding document: ", e);
-    showStatus(`Gagal menyimpan: ${e.message}`, "error");
+  } catch (error) {
+    handleError(error, saveItem);
   } finally {
-    saveBtn.disabled = false;
-    if (statusMessage.classList.contains("info")) statusMessage.style.display = "none";
+    hideSpinner();
+    saveBtn.disabled = !navigator.onLine;
   }
-});
+}
 
-// ===== Gallery Listener (No changes) =====
+/**
+ * Deletes a specific item from the Firestore "wardrobe" collection.
+ * @param {string} docId - The ID of the document to delete.
+ */
+async function deleteItem(docId) {
+  if (!confirm("Are you sure you want to delete this item?")) return;
+  if (!navigator.onLine) {
+    showStatus("No internet connection. Please try again later.", "error", () => deleteItem(docId));
+    return;
+  }
+
+  showSpinner();
+  try {
+    await deleteDoc(doc(db, "wardrobe", docId));
+    showStatus("Item deleted successfully.", "success");
+  } catch (error) {
+    handleError(error, () => deleteItem(docId));
+  } finally {
+    hideSpinner();
+  }
+}
+
+/**
+ * Sets up a real-time listener for the user's wardrobe items in Firestore.
+ * @param {string} userId - The UID of the currently logged-in user.
+ */
 function setupGalleryListener(userId) {
-  if (unsubscribeFromGallery) unsubscribeFromGallery();
+  // Unsubscribe from any previous listener
+  if (unsubscribeFromGallery) {
+    unsubscribeFromGallery();
+  }
+
   const q = query(collection(db, "wardrobe"), where("userId", "==", userId));
+
   unsubscribeFromGallery = onSnapshot(q, (snapshot) => {
-    gallery.innerHTML = "";
     const items = [];
     snapshot.forEach(docSnap => items.push({ id: docSnap.id, ...docSnap.data() }));
+    
+    // Sort items by timestamp, newest first
     items.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    renderGallery(items);
+
+  }, (error) => {
+    // This function is called when the listener fails
+    handleError(error, () => setupGalleryListener(userId));
+  });
+}
+
+/**
+ * Renders the gallery items in the DOM.
+ * @param {Array<object>} items - An array of item objects from Firestore.
+ */
+function renderGallery(items) {
+    gallery.innerHTML = ""; // Clear current gallery
     emptyState.style.display = items.length === 0 ? "block" : "none";
+
     items.forEach(item => {
       const div = document.createElement("div");
-      div.classList.add("item");
+      div.className = "item";
       div.innerHTML = `
         <img src="${item.imageBase64}" alt="${item.label}">
         <p>${item.label}</p>
         <div class="actions">
-          <button class="delete-btn" data-id="${item.id}">Hapus</button>
+          <button class="delete-btn" data-id="${item.id}">Delete</button>
         </div>
       `;
       gallery.appendChild(div);
+      
+      // Add event listener directly to the new delete button
+      div.querySelector('.delete-btn').addEventListener('click', () => deleteItem(item.id));
     });
-    document.querySelectorAll(".delete-btn").forEach(button => {
-      button.addEventListener("click", () => deleteItem(button.getAttribute("data-id")));
-    });
-  });
 }
 
-// ===== Utility Functions (No changes) =====
-function resetInput() {
-    currentFile = null;
-    currentBase64 = null;
-    imageInput.value = "";
-    preview.src = "";
-    fileInfo.textContent = "";
-}
 
-function showStatus(message, type, duration = 4000) {
-  statusMessage.textContent = message;
-  statusMessage.className = "status-message " + type;
-  statusMessage.style.display = "block";
-  saveBtn.disabled = (type === 'info');
-  if (type !== 'info') {
-    setTimeout(() => { statusMessage.style.display = "none"; }, duration);
-  }
-}
+// ===== Event Listeners =====
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+loginGoogleBtn.addEventListener("click", loginWithGoogle);
+loginAnonBtn.addEventListener("click", loginAnonymously);
+logoutBtn.addEventListener("click", logout);
+imageInput.addEventListener("change", handleFileInput);
+saveBtn.addEventListener("click", saveItem);
 
-async function deleteItem(docId) {
-  if (!confirm("Apakah Anda yakin ingin menghapus item ini?")) return;
-  try {
-    await deleteDoc(doc(db, "wardrobe", docId));
-    showStatus("Item berhasil dihapus!", "success");
-  } catch (e) {
-    console.error("Error removing document:", e);
-    showStatus("Gagal menghapus item.", "error");
-  }
-}
+// ===== Initial Load =====
+updateOnlineStatus(); // Initial check on page load
+
+/*
+--- How to Test Error Scenarios ---
+
+1. Network Issues:
+   - In your browser's developer tools (F12), go to the "Network" tab.
+   - Find the "Throttling" dropdown and select "Offline".
+   - Try to save or delete an item. The offline indicator and error messages should appear with a retry button.
+   - Switch back to "No throttling" to restore the connection and test the retry mechanism.
+
+2. Server Errors (Simulated):
+   - Go to your Firebase project console.
+   - Under "Firestore Database" -> "Rules", change the rules to temporarily deny writes/deletes.
+     For example: `allow write: if false;`
+   - Try to save or delete an item in the app. You should see a "Permission Denied" error with a retry button.
+   - Remember to change the rules back to `allow write: if request.auth != null;` after testing.
+
+3. Invalid Data:
+   - The current code already validates file types.
+   - Test this by trying to upload a non-image file (e.g., a .txt file). The app should show an error message.
+*/
